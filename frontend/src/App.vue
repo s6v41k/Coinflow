@@ -101,6 +101,7 @@ const withdrawnTotal = ref(0);
 const uploadStatus = ref('Upload a CSV or load the sample transactions for the demo.');
 const withdrawMessage = ref('');
 const selectedSample = ref('starter');
+const sortMode = ref('date');
 const nudgeMessages = [
   'Small coins still build a safety cushion.',
   'You are one good habit away from your rainy day goal.',
@@ -122,6 +123,20 @@ const parsedTransactions = computed(() =>
     };
   })
 );
+
+const sortedTransactions = computed(() => {
+  const items = [...parsedTransactions.value];
+
+  if (sortMode.value === 'amount-desc') {
+    return items.sort((a, b) => b.amount - a.amount);
+  }
+
+  if (sortMode.value === 'roundup-desc') {
+    return items.sort((a, b) => b.roundUp - a.roundUp);
+  }
+
+  return items.sort((a, b) => new Date(a.date) - new Date(b.date));
+});
 
 const activeSavings = computed(() =>
   roundUpEnabled.value
@@ -159,11 +174,31 @@ const recommendedWeeklyTarget = computed(() => {
   return Number(Math.max(3, (activeSavings.value / Math.max(1, transactionCount.value)) * 7).toFixed(2));
 });
 const savingsProjection = computed(() => Number((averageSavedPerWeek.value * 4).toFixed(2)));
+const roundUpSavedToday = computed(() => {
+  if (!parsedTransactions.value.length || !roundUpEnabled.value) return 0;
+  const latestDate = [...parsedTransactions.value]
+    .map((transaction) => transaction.date)
+    .sort()
+    .at(-1);
+
+  return Number(
+    parsedTransactions.value
+      .filter((transaction) => transaction.date === latestDate)
+      .reduce((sum, transaction) => sum + transaction.roundUp, 0)
+      .toFixed(2)
+  );
+});
 const currentNudge = computed(() => {
   if (!parsedTransactions.value.length) return nudgeMessages[0];
   if (progressPercent.value >= 75) return 'You are close. One more week of spare change could finish the goal.';
   return nudgeMessages[parsedTransactions.value.length % nudgeMessages.length];
 });
+
+function getRoundUpLevel(roundUp) {
+  if (roundUp >= 0.7) return 'high';
+  if (roundUp >= 0.35) return 'medium';
+  return 'low';
+}
 
 function parseCsvText(text) {
   const rows = text
@@ -301,7 +336,6 @@ function withdrawSavings() {
                   {{ sample.label }}
                 </button>
               </div>
-              <p class="sample-note">Each sample includes 25 transactions and is ready to use for the presentation.</p>
             </div>
           </div>
         </article>
@@ -358,10 +392,17 @@ function withdrawSavings() {
               <p class="section-kicker">Transactions</p>
               <h2>Uploaded purchases</h2>
             </div>
-            <span class="table-count">{{ parsedTransactions.length }} items</span>
+            <div class="table-tools">
+              <span class="table-count">{{ parsedTransactions.length }} items</span>
+              <select v-model="sortMode" class="sort-select">
+                <option value="date">Sort by date</option>
+                <option value="amount-desc">Highest amount</option>
+                <option value="roundup-desc">Highest round-up</option>
+              </select>
+            </div>
           </div>
 
-          <div v-if="parsedTransactions.length" class="table-wrapper">
+          <div v-if="sortedTransactions.length" class="table-wrapper">
             <table>
               <thead>
                 <tr>
@@ -372,11 +413,22 @@ function withdrawSavings() {
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="transaction in parsedTransactions" :key="transaction.id">
+                <tr v-for="transaction in sortedTransactions" :key="transaction.id">
                   <td>{{ transaction.date }}</td>
                   <td>{{ transaction.merchant }}</td>
                   <td>EUR {{ transaction.amount.toFixed(2) }}</td>
-                  <td>EUR {{ roundUpEnabled ? transaction.roundUp.toFixed(2) : '0.00' }}</td>
+                  <td>
+                    <div class="roundup-cell">
+                      <span>EUR {{ roundUpEnabled ? transaction.roundUp.toFixed(2) : '0.00' }}</span>
+                      <span
+                        v-if="roundUpEnabled"
+                        class="roundup-badge"
+                        :class="getRoundUpLevel(transaction.roundUp)"
+                      >
+                        {{ getRoundUpLevel(transaction.roundUp) }}
+                      </span>
+                    </div>
+                  </td>
                 </tr>
               </tbody>
             </table>
@@ -386,6 +438,16 @@ function withdrawSavings() {
       </div>
 
       <aside class="side-column">
+        <article class="card metrics-card">
+          <p class="section-kicker">Today</p>
+          <h2>Round-up saved today</h2>
+
+          <div class="today-highlight">
+            <strong>EUR {{ roundUpSavedToday.toFixed(2) }}</strong>
+            <p>Spare change from the most recent transaction day currently loaded in the app.</p>
+          </div>
+        </article>
+
         <article class="card metrics-card">
           <p class="section-kicker">Quick Stats</p>
           <h2>Small features for the demo</h2>
