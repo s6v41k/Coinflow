@@ -1,14 +1,7 @@
-<<<<<<< HEAD
-# Dependencies
 node_modules/
+dist/
 .env
-
-# Logs
+.env.*
 *.log
-
-# OS
 .DS_Store
 Thumbs.db
-
-
-/generated/prisma
